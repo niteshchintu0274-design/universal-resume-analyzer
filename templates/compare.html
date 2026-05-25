@@ -1,0 +1,89 @@
+{% extends "base.html" %}
+
+{% block title %}Compare Resumes | Universal Resume Analyzer + Career Assistant{% endblock %}
+
+{% block content %}
+<section class="mx-auto max-w-6xl px-4 py-6 sm:px-6 lg:px-8">
+  <div class="mb-6">
+    <a href="{{ url_for('index') }}" class="inline-flex items-center gap-2 text-sm font-medium text-slate-600 hover:text-slate-950 dark:text-slate-300 dark:hover:text-white">
+      <i data-lucide="arrow-left" class="h-4 w-4"></i>
+      Back to analyzer
+    </a>
+    <h1 class="mt-3 text-3xl font-semibold tracking-tight text-slate-950 dark:text-white">Resume Version Comparison</h1>
+    <p class="mt-2 max-w-2xl text-sm leading-6 text-slate-600 dark:text-slate-300">Upload Resume V1 and V2 to compare score increase, added skills, removed skills, and improvement percentage.</p>
+  </div>
+
+  <form action="{{ url_for('compare') }}" method="post" enctype="multipart/form-data" class="rounded-md border border-slate-200 bg-white p-5 shadow-soft dark:border-slate-800 dark:bg-slate-900 sm:p-6">
+    <div class="grid gap-4 md:grid-cols-2">
+      <div>
+        <label for="resumeV1" class="block text-sm font-medium text-slate-700 dark:text-slate-200">Resume V1</label>
+        <input id="resumeV1" name="resume_v1" type="file" accept="application/pdf,.pdf" required class="mt-2 block w-full rounded-md border border-slate-200 bg-white px-3 py-2 text-sm file:mr-4 file:rounded-md file:border-0 file:bg-slate-900 file:px-4 file:py-2 file:text-sm file:font-semibold file:text-white dark:border-slate-700 dark:bg-slate-950">
+      </div>
+      <div>
+        <label for="resumeV2" class="block text-sm font-medium text-slate-700 dark:text-slate-200">Resume V2</label>
+        <input id="resumeV2" name="resume_v2" type="file" accept="application/pdf,.pdf" required class="mt-2 block w-full rounded-md border border-slate-200 bg-white px-3 py-2 text-sm file:mr-4 file:rounded-md file:border-0 file:bg-brand-600 file:px-4 file:py-2 file:text-sm file:font-semibold file:text-white dark:border-slate-700 dark:bg-slate-950">
+      </div>
+    </div>
+    <div class="mt-5">
+      <label for="jobDescription" class="block text-sm font-medium text-slate-700 dark:text-slate-200">Optional target job description</label>
+      <textarea id="jobDescription" name="job_description" rows="5" class="mt-2 block w-full rounded-md border border-slate-200 bg-white px-3 py-3 text-sm leading-6 dark:border-slate-700 dark:bg-slate-950" placeholder="Paste a job description to compare both versions against the same target."></textarea>
+    </div>
+    <button type="submit" class="mt-6 inline-flex w-full items-center justify-center gap-2 rounded-md bg-brand-600 px-4 py-3 text-sm font-semibold text-white hover:bg-brand-700">
+      <i data-lucide="git-compare-arrows" class="h-4 w-4"></i>
+      Compare Resumes
+    </button>
+  </form>
+
+  {% if comparison %}
+    <section class="mt-6 grid gap-6 lg:grid-cols-3">
+      <div class="rounded-md border border-slate-200 bg-white p-5 shadow-sm dark:border-slate-800 dark:bg-slate-900">
+        <p class="text-sm text-slate-500 dark:text-slate-400">Resume V1</p>
+        <p class="mt-2 text-4xl font-semibold text-slate-950 dark:text-white">{{ comparison.v1.score }}</p>
+        <p class="mt-2 text-sm text-slate-600 dark:text-slate-300">{{ comparison.v1.profile.role }} | {{ comparison.v1.profile.industry }}</p>
+      </div>
+      <div class="rounded-md border border-slate-200 bg-white p-5 shadow-sm dark:border-slate-800 dark:bg-slate-900">
+        <p class="text-sm text-slate-500 dark:text-slate-400">Resume V2</p>
+        <p class="mt-2 text-4xl font-semibold text-brand-700 dark:text-brand-200">{{ comparison.v2.score }}</p>
+        <p class="mt-2 text-sm text-slate-600 dark:text-slate-300">{{ comparison.v2.profile.role }} | {{ comparison.v2.profile.industry }}</p>
+      </div>
+      <div class="rounded-md border border-slate-200 bg-white p-5 shadow-sm dark:border-slate-800 dark:bg-slate-900">
+        <p class="text-sm text-slate-500 dark:text-slate-400">Improvement</p>
+        <p class="mt-2 text-4xl font-semibold {{ 'text-brand-700 dark:text-brand-200' if comparison.score_increase >= 0 else 'text-red-600 dark:text-red-200' }}">{{ comparison.score_increase }}</p>
+        <p class="mt-2 text-sm text-slate-600 dark:text-slate-300">{{ comparison.improvement_percentage }}% change | Better: {{ comparison.better_version }}</p>
+      </div>
+    </section>
+
+    <section class="mt-6 grid gap-6 lg:grid-cols-2">
+      <div class="rounded-md border border-slate-200 bg-white p-5 shadow-sm dark:border-slate-800 dark:bg-slate-900">
+        <h2 class="text-sm font-semibold text-slate-950 dark:text-white">Added Skills</h2>
+        <div class="mt-3 flex flex-wrap gap-2">
+          {% for skill in comparison.added_skills %}
+            <span class="rounded-md bg-brand-50 px-2.5 py-1.5 text-xs font-medium text-brand-700 dark:bg-brand-950/40 dark:text-brand-200">{{ skill }}</span>
+          {% else %}
+            <span class="text-sm text-slate-500">No added skills detected.</span>
+          {% endfor %}
+        </div>
+      </div>
+      <div class="rounded-md border border-slate-200 bg-white p-5 shadow-sm dark:border-slate-800 dark:bg-slate-900">
+        <h2 class="text-sm font-semibold text-slate-950 dark:text-white">Removed Skills</h2>
+        <div class="mt-3 flex flex-wrap gap-2">
+          {% for skill in comparison.removed_skills %}
+            <span class="rounded-md bg-red-50 px-2.5 py-1.5 text-xs font-medium text-red-700 dark:bg-red-950/40 dark:text-red-200">{{ skill }}</span>
+          {% else %}
+            <span class="text-sm text-slate-500">No removed skills detected.</span>
+          {% endfor %}
+        </div>
+      </div>
+    </section>
+
+    <section class="mt-6 rounded-md border border-slate-200 bg-white p-5 shadow-sm dark:border-slate-800 dark:bg-slate-900">
+      <h2 class="text-sm font-semibold text-slate-950 dark:text-white">Recommended Fixes for V2</h2>
+      <ul class="mt-3 space-y-2 text-sm leading-6 text-slate-700 dark:text-slate-300">
+        {% for item in comparison.recommendations %}
+          <li class="flex gap-2"><i data-lucide="arrow-up-right" class="mt-0.5 h-4 w-4 shrink-0 text-brand-600"></i>{{ item }}</li>
+        {% endfor %}
+      </ul>
+    </section>
+  {% endif %}
+</section>
+{% endblock %}

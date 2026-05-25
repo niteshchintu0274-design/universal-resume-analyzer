@@ -1,0 +1,114 @@
+<!DOCTYPE html>
+<html lang="en" class="h-full">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>{% block title %}Universal Resume Analyzer + Career Assistant{% endblock %}</title>
+
+  <script src="{{ config.TAILWIND_CDN_URL }}"></script>
+  <script>
+    tailwind.config = {
+      darkMode: 'class',
+      theme: {
+        extend: {
+          colors: {
+            ink: '#0b1220',
+            panel: '#111827',
+            line: '#d8e0ea',
+            brand: {
+              50: '#ecfdf5',
+              100: '#d1fae5',
+              500: '#10b981',
+              600: '#059669',
+              700: '#047857'
+            },
+            cyanx: {
+              50: '#ecfeff',
+              500: '#06b6d4',
+              600: '#0891b2'
+            },
+            warn: {
+              50: '#fffbeb',
+              500: '#f59e0b',
+              600: '#d97706'
+            }
+          },
+          boxShadow: {
+            soft: '0 14px 40px rgba(15, 23, 42, 0.10)'
+          }
+        }
+      }
+    }
+  </script>
+  <script>
+    const savedTheme = localStorage.getItem('resumeAnalyzerTheme');
+    if (savedTheme === 'dark' || (!savedTheme && window.matchMedia('(prefers-color-scheme: dark)').matches)) {
+      document.documentElement.classList.add('dark');
+    }
+  </script>
+
+  <script src="https://unpkg.com/lucide@latest/dist/umd/lucide.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+  <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}">
+</head>
+<body
+  class="min-h-full bg-slate-100 text-slate-900 antialiased dark:bg-ink dark:text-slate-100"
+  data-career-chat-url="{{ url_for('api_career_chat') }}"
+  data-rewrite-url="{{ url_for('api_rewrite_section') }}"
+  data-job-match-url="{{ url_for('api_job_match') }}"
+>
+  <header class="sticky top-0 z-40 border-b border-slate-200 bg-white/90 backdrop-blur dark:border-slate-800 dark:bg-ink/90">
+    <div class="mx-auto flex max-w-7xl items-center justify-between gap-3 px-4 py-3 sm:px-6 lg:px-8">
+      <a href="{{ url_for('index') }}" class="flex min-w-0 items-center gap-3">
+        <span class="grid h-9 w-9 shrink-0 place-items-center rounded-md bg-brand-600 text-sm font-bold text-white">AI</span>
+        <span class="min-w-0">
+          <span class="block truncate text-sm font-semibold tracking-wide text-slate-950 dark:text-white" data-en="Universal Resume Analyzer" data-hi="यूनिवर्सल रिज्यूमे एनालाइज़र">Universal Resume Analyzer</span>
+          <span class="block truncate text-[11px] font-medium text-brand-700 dark:text-brand-300" data-en="+ Career Assistant" data-hi="+ करियर असिस्टेंट">+ Career Assistant</span>
+        </span>
+      </a>
+
+      <nav class="hidden items-center gap-1 text-sm text-slate-600 dark:text-slate-300 sm:flex">
+        <a href="{{ url_for('index') }}" class="rounded-md px-3 py-2 hover:bg-slate-100 hover:text-slate-950 dark:hover:bg-slate-800 dark:hover:text-white" data-en="Analyze" data-hi="विश्लेषण">Analyze</a>
+        <a href="{{ url_for('compare') }}" class="rounded-md px-3 py-2 hover:bg-slate-100 hover:text-slate-950 dark:hover:bg-slate-800 dark:hover:text-white" data-en="Compare" data-hi="तुलना">Compare</a>
+        <a href="{{ url_for('chatbot') }}" class="rounded-md px-3 py-2 hover:bg-slate-100 hover:text-slate-950 dark:hover:bg-slate-800 dark:hover:text-white" data-en="Chat" data-hi="चैट">Chat</a>
+      </nav>
+
+      <div class="flex items-center gap-2">
+        <select id="languageToggle" class="h-9 rounded-md border border-slate-200 bg-white px-2 text-xs font-medium text-slate-700 shadow-sm dark:border-slate-700 dark:bg-slate-900 dark:text-slate-200" aria-label="Language">
+          <option value="en">English</option>
+          <option value="hi">हिंदी</option>
+        </select>
+        <button id="themeToggle" type="button" class="grid h-9 w-9 place-items-center rounded-md border border-slate-200 bg-white text-slate-700 shadow-sm hover:bg-slate-50 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-200 dark:hover:bg-slate-800" title="Toggle dark mode">
+          <i data-lucide="moon" class="h-4 w-4 dark:hidden"></i>
+          <i data-lucide="sun" class="hidden h-4 w-4 dark:block"></i>
+        </button>
+      </div>
+    </div>
+  </header>
+
+  <main>
+    {% with messages = get_flashed_messages(with_categories=true) %}
+      {% if messages %}
+        <div class="mx-auto max-w-7xl px-4 pt-4 sm:px-6 lg:px-8">
+          <div class="space-y-2">
+            {% for category, message in messages %}
+              <div class="rounded-md border px-4 py-3 text-sm {{ 'border-red-200 bg-red-50 text-red-800 dark:border-red-900/60 dark:bg-red-950/40 dark:text-red-200' if category == 'error' else 'border-brand-100 bg-brand-50 text-brand-800 dark:border-brand-900/60 dark:bg-brand-950/30 dark:text-brand-100' }}">
+                {{ message }}
+              </div>
+            {% endfor %}
+          </div>
+        </div>
+      {% endif %}
+    {% endwith %}
+
+    {% block content %}{% endblock %}
+  </main>
+
+  <footer class="mt-12 border-t border-slate-200 bg-white py-5 text-center text-xs text-slate-500 dark:border-slate-800 dark:bg-ink dark:text-slate-500">
+    <span data-en="Universal Resume Analyzer + Career Assistant" data-hi="यूनिवर्सल रिज्यूमे एनालाइज़र + करियर असिस्टेंट">Universal Resume Analyzer + Career Assistant</span>
+  </footer>
+
+  <script src="{{ url_for('static', filename='js/main.js') }}"></script>
+  {% block scripts %}{% endblock %}
+</body>
+</html>

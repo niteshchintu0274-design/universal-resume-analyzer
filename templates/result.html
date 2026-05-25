@@ -1,0 +1,513 @@
+{% extends "base.html" %}
+
+{% set profile = result.profile|default({}) %}
+{% set scores = result.scores|default({}) %}
+{% set sections = result.sections|default({}) %}
+{% set ats = result.ats|default({}) %}
+{% set apply_readiness = result.apply_readiness|default({}) %}
+{% set achievements = result.achievements|default({}) %}
+{% set contact = result.contact_details|default(analysis.contact_details)|default({}) %}
+{% set display_score = display_score|default(scores.overall|default(0)) %}
+{% set score_degrees = display_score * 3.6 %}
+{% set score_state = "excellent" if display_score >= 85 else "strong" if display_score >= 70 else "fair" if display_score >= 55 else "weak" %}
+
+{% block title %}Resume Analyzer Dashboard | Universal Resume Analyzer + Career Assistant{% endblock %}
+
+{% block content %}
+<section class="mx-auto max-w-7xl px-4 py-5 sm:px-6 lg:px-8">
+  <div class="flex flex-col gap-4 lg:flex-row lg:items-end lg:justify-between">
+    <div class="min-w-0">
+      <a href="{{ url_for('index') }}" class="inline-flex items-center gap-2 text-sm font-medium text-slate-600 hover:text-slate-950 dark:text-slate-300 dark:hover:text-white">
+        <i data-lucide="arrow-left" class="h-4 w-4"></i>
+        Back to upload
+      </a>
+      <div class="mt-3 flex flex-wrap items-center gap-2">
+        <h1 class="text-2xl font-semibold tracking-tight text-slate-950 dark:text-white sm:text-3xl">Resume Analyzer Dashboard</h1>
+        <span class="rounded-md px-2.5 py-1 text-xs font-semibold {{ 'bg-brand-50 text-brand-700 dark:bg-brand-950/40 dark:text-brand-200' if score_state in ['excellent','strong'] else 'bg-amber-50 text-amber-700 dark:bg-amber-950/40 dark:text-amber-200' if score_state == 'fair' else 'bg-red-50 text-red-700 dark:bg-red-950/40 dark:text-red-200' }}">{{ score_data.grade if score_data else "Resume Score" }}</span>
+      </div>
+      <p class="mt-2 max-w-3xl text-sm leading-6 text-slate-600 dark:text-slate-300">
+        {{ analysis.original_filename }}{% if analysis.created_at_display %}<span class="mx-2 text-slate-300 dark:text-slate-700">|</span>{{ analysis.created_at_display }}{% if analysis.created_at_relative %} <span class="text-slate-400">({{ analysis.created_at_relative }})</span>{% endif %}{% endif %}
+      </p>
+    </div>
+
+    <div class="flex flex-wrap gap-2 text-xs">
+      {% if analysis.candidate_name %}
+        <span class="rounded-md border border-slate-200 bg-white px-3 py-2 font-medium text-slate-700 dark:border-slate-800 dark:bg-slate-900 dark:text-slate-200">{{ analysis.candidate_name }}</span>
+      {% endif %}
+      {% if contact.email %}
+        <span class="sensitive-value rounded-md border border-slate-200 bg-white px-3 py-2 font-medium text-slate-700 dark:border-slate-800 dark:bg-slate-900 dark:text-slate-200" data-masked="{{ analysis.email_masked or 'Email hidden' }}" data-full="{{ contact.email }}">{{ analysis.email_masked or "Email hidden" }}</span>
+      {% endif %}
+      {% if contact.phone %}
+        <span class="sensitive-value rounded-md border border-slate-200 bg-white px-3 py-2 font-medium text-slate-700 dark:border-slate-800 dark:bg-slate-900 dark:text-slate-200" data-masked="{{ analysis.phone_masked or 'Phone hidden' }}" data-full="{{ contact.phone }}">{{ analysis.phone_masked or "Phone hidden" }}</span>
+      {% endif %}
+      {% if contact.email or contact.phone %}
+        <button id="togglePrivateInfo" type="button" class="inline-flex items-center gap-2 rounded-md border border-slate-200 bg-white px-3 py-2 font-semibold text-slate-600 hover:bg-slate-50 dark:border-slate-800 dark:bg-slate-900 dark:text-slate-300 dark:hover:bg-slate-800">
+          <i data-lucide="eye" class="h-3.5 w-3.5"></i>
+          Reveal
+        </button>
+      {% endif %}
+    </div>
+  </div>
+
+  <nav class="sticky top-[65px] z-30 mt-5 -mx-4 border-y border-slate-200 bg-slate-100/95 px-4 py-2 backdrop-blur dark:border-slate-800 dark:bg-ink/95 sm:-mx-6 sm:px-6 lg:-mx-8 lg:px-8">
+    <div class="app-scrollbar mx-auto flex max-w-7xl gap-2 overflow-x-auto text-sm">
+      {% for label, target, icon in [
+        ("Overview", "overview", "layout-dashboard"),
+        ("Heatmap", "heatmap", "activity"),
+        ("ATS", "ats", "scan-text"),
+        ("Rewriter", "rewriter", "wand-sparkles"),
+        ("Roadmap", "roadmap", "calendar-days"),
+        ("Jobs", "jobs", "briefcase-business"),
+        ("Chat", "chat", "message-square-text")
+      ] %}
+        <a href="#{{ target }}" class="section-nav-link inline-flex shrink-0 items-center gap-2 rounded-md px-3 py-2 font-medium text-slate-600 hover:bg-white hover:text-slate-950 dark:text-slate-300 dark:hover:bg-slate-900 dark:hover:text-white">
+          <i data-lucide="{{ icon }}" class="h-4 w-4"></i>{{ label }}
+        </a>
+      {% endfor %}
+    </div>
+  </nav>
+
+  {% if result.error %}
+    <div class="mt-5 rounded-md border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-900 dark:border-amber-900/60 dark:bg-amber-950/40 dark:text-amber-100">
+      Some hosted AI services are unavailable, so this page is using the local resume analysis.
+    </div>
+  {% endif %}
+
+  <div id="overview" class="scroll-mt-32 mt-5 grid gap-5 xl:grid-cols-[360px_minmax(0,1fr)]">
+    <aside class="space-y-5">
+      <section class="rounded-md border border-slate-200 bg-white p-5 shadow-soft dark:border-slate-800 dark:bg-slate-900">
+        <div class="flex items-center gap-5">
+          <div class="grid h-36 w-36 shrink-0 place-items-center rounded-full" style="background: conic-gradient({{ '#10b981' if score_state in ['excellent','strong'] else '#f59e0b' if score_state == 'fair' else '#ef4444' }} {{ score_degrees }}deg, #e2e8f0 0deg);">
+            <div class="grid h-28 w-28 place-items-center rounded-full bg-white shadow-inner dark:bg-slate-950">
+              <div class="text-center">
+                <div class="text-4xl font-semibold tracking-tight text-slate-950 dark:text-white">{{ display_score }}</div>
+                <div class="text-[11px] font-semibold uppercase tracking-wide text-slate-500 dark:text-slate-400">out of 100</div>
+              </div>
+            </div>
+          </div>
+          <div class="min-w-0">
+            <p class="text-sm font-semibold text-slate-950 dark:text-white">{{ profile.role|default("General Professional") }}</p>
+            <p class="mt-1 text-xs leading-5 text-slate-500 dark:text-slate-400">{{ profile.industry|default("General") }} | {{ profile.sub_domain|default("Career") }}</p>
+            <div class="mt-3 flex flex-wrap gap-2">
+              <span class="rounded-md bg-brand-50 px-2.5 py-1.5 text-xs font-semibold text-brand-700 dark:bg-brand-950/40 dark:text-brand-200">{{ profile.confidence|default(0) }}% confidence</span>
+              <span class="rounded-md bg-slate-100 px-2.5 py-1.5 text-xs font-semibold text-slate-600 dark:bg-slate-800 dark:text-slate-300">{{ result.candidate_level|default("candidate")|title }}</span>
+            </div>
+          </div>
+        </div>
+        <p class="mt-5 text-sm leading-6 text-slate-600 dark:text-slate-300">{{ result.summary }}</p>
+        {% if result.ai_status %}
+          <p class="mt-3 inline-flex rounded-md bg-slate-100 px-3 py-1.5 text-xs font-medium text-slate-600 dark:bg-slate-800 dark:text-slate-300">{{ result.ai_status }}</p>
+        {% endif %}
+      </section>
+
+      <section class="rounded-md border border-slate-200 bg-white p-5 shadow-sm dark:border-slate-800 dark:bg-slate-900">
+        <div class="flex items-center justify-between gap-3">
+          <h2 class="text-sm font-semibold text-slate-950 dark:text-white">Contact Trust</h2>
+          <span class="rounded-md px-2 py-1 text-xs font-semibold {{ 'bg-brand-50 text-brand-700 dark:bg-brand-950/40 dark:text-brand-200' if contact.email_status == 'valid' else 'bg-amber-50 text-amber-700 dark:bg-amber-950/40 dark:text-amber-200' if contact.email_status == 'invalid' else 'bg-red-50 text-red-700 dark:bg-red-950/40 dark:text-red-200' }}">{{ contact.email_label|default("Email missing") }}</span>
+        </div>
+        <div class="mt-4 grid grid-cols-2 gap-2 text-xs">
+          {% for label, ok in [
+            ("Phone", contact.phone_status == "found"),
+            ("LinkedIn", contact.linkedin),
+            ("GitHub", contact.github),
+            ("Portfolio", contact.portfolio),
+            ("Live links", contact.live_project_links|length > 0)
+          ] %}
+            <div class="flex items-center justify-between rounded-md bg-slate-50 px-3 py-2 dark:bg-slate-950">
+              <span class="font-medium text-slate-600 dark:text-slate-300">{{ label }}</span>
+              <span class="{{ 'text-brand-600 dark:text-brand-300' if ok else 'text-slate-400' }}">{{ "Found" if ok else "Missing" }}</span>
+            </div>
+          {% endfor %}
+        </div>
+      </section>
+    </aside>
+
+    <div class="space-y-5">
+      <section class="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
+        {% for label, value, icon in [
+          ("ATS", scores.ats|default(0), "scan-text"),
+          ("Apply Ready", apply_readiness.score|default(0), "send"),
+          ("Impact", scores.impact|default(0), "activity"),
+          ("Keywords", scores.keywords|default(0), "key-round")
+        ] %}
+          {% set state = "good" if value >= 75 else "warn" if value >= 55 else "bad" %}
+          <article class="rounded-md border bg-white p-4 shadow-sm dark:bg-slate-900 {{ 'border-brand-200 dark:border-brand-900/60' if state == 'good' else 'border-amber-200 dark:border-amber-900/60' if state == 'warn' else 'border-red-200 dark:border-red-900/60' }}">
+            <div class="flex items-center justify-between">
+              <span class="grid h-10 w-10 place-items-center rounded-md {{ 'bg-brand-50 text-brand-700 dark:bg-brand-950/40 dark:text-brand-200' if state == 'good' else 'bg-amber-50 text-amber-700 dark:bg-amber-950/40 dark:text-amber-200' if state == 'warn' else 'bg-red-50 text-red-700 dark:bg-red-950/40 dark:text-red-200' }}"><i data-lucide="{{ icon }}" class="h-5 w-5"></i></span>
+              <span class="text-2xl font-semibold text-slate-950 dark:text-white">{{ value }}</span>
+            </div>
+            <p class="mt-3 text-sm font-medium text-slate-600 dark:text-slate-300">{{ label }}</p>
+          </article>
+        {% endfor %}
+      </section>
+
+      <section class="rounded-md border border-slate-200 bg-white p-5 shadow-sm dark:border-slate-800 dark:bg-slate-900">
+        <div class="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
+          <div>
+            <h2 class="text-lg font-semibold text-slate-950 dark:text-white">Score Breakdown</h2>
+            <p class="mt-1 text-sm text-slate-500 dark:text-slate-400">Weighted from ATS readability, role skills, formatting, projects, experience alternatives, impact, grammar, and keywords.</p>
+          </div>
+          <span class="inline-flex w-fit rounded-md bg-slate-100 px-3 py-1.5 text-xs font-semibold text-slate-600 dark:bg-slate-800 dark:text-slate-300">Explainable score</span>
+        </div>
+        <div class="mt-5 grid gap-3 md:grid-cols-2">
+          {% for key, item in score_data.breakdown.items() %}
+            {% set pct = item.percentage|default(item.points)|int %}
+            <div class="rounded-md border border-slate-200 p-3 dark:border-slate-800">
+              <div class="flex items-center justify-between gap-3 text-xs">
+                <span class="font-semibold text-slate-700 dark:text-slate-200">{{ item.label }}</span>
+                <span class="font-semibold text-slate-950 dark:text-white">{{ item.points }}/{{ item.max_points }}</span>
+              </div>
+              <div class="mt-2 h-2 overflow-hidden rounded-full bg-slate-100 dark:bg-slate-800">
+                <div class="match-bar h-full rounded-full {{ 'bg-brand-600' if pct >= 75 else 'bg-amber-500' if pct >= 55 else 'bg-red-500' }}" data-progress="{{ pct }}"></div>
+              </div>
+            </div>
+          {% endfor %}
+        </div>
+      </section>
+
+      <section class="rounded-md border border-slate-200 bg-white p-5 shadow-sm dark:border-slate-800 dark:bg-slate-900">
+        <h2 class="text-lg font-semibold text-slate-950 dark:text-white">Priority Fixes</h2>
+        <div class="mt-4 grid gap-4 lg:grid-cols-3">
+          {% for title, items, icon, color in [
+            ("Strengths", result.strengths[:5], "check-circle-2", "brand"),
+            ("Weaknesses", result.gaps[:5], "alert-circle", "amber"),
+            ("Next Fixes", result.recommendations[:5], "arrow-up-right", "cyan")
+          ] %}
+            <div class="rounded-md bg-slate-50 p-4 dark:bg-slate-950">
+              <h3 class="text-sm font-semibold text-slate-950 dark:text-white">{{ title }}</h3>
+              <ul class="mt-3 space-y-2 text-sm leading-6 text-slate-700 dark:text-slate-300">
+                {% for item in items %}
+                  <li class="flex gap-2"><i data-lucide="{{ icon }}" class="mt-0.5 h-4 w-4 shrink-0 {{ 'text-brand-600' if color == 'brand' else 'text-amber-500' if color == 'amber' else 'text-cyanx-600' }}"></i><span>{{ item }}</span></li>
+                {% else %}
+                  <li class="text-slate-500">No items detected.</li>
+                {% endfor %}
+              </ul>
+            </div>
+          {% endfor %}
+        </div>
+      </section>
+    </div>
+  </div>
+
+  <section id="heatmap" class="scroll-mt-32 mt-6 grid gap-5 xl:grid-cols-[minmax(0,1fr)_430px]">
+    <div class="rounded-md border border-slate-200 bg-white p-5 shadow-sm dark:border-slate-800 dark:bg-slate-900">
+      <div class="flex items-center justify-between gap-3">
+        <h2 class="text-lg font-semibold text-slate-950 dark:text-white">Resume Heatmap</h2>
+        <span class="rounded-md bg-slate-100 px-2.5 py-1.5 text-xs font-semibold text-slate-600 dark:bg-slate-800 dark:text-slate-300">{{ result.heatmap|length }} signals</span>
+      </div>
+      <div class="mt-4 grid gap-3 md:grid-cols-2">
+        {% for item in result.heatmap[:12] %}
+          <article class="rounded-md border p-3 {{ 'border-brand-200 bg-brand-50 dark:border-brand-900 dark:bg-brand-950/30' if item.level == 'green' else 'border-amber-200 bg-amber-50 dark:border-amber-900 dark:bg-amber-950/30' if item.level == 'yellow' else 'border-red-200 bg-red-50 dark:border-red-900 dark:bg-red-950/30' }}">
+            <div class="flex items-center justify-between gap-3">
+              <p class="text-sm font-semibold text-slate-950 dark:text-white">{{ item.section }}</p>
+              <span class="h-2.5 w-2.5 rounded-full {{ 'bg-brand-600' if item.level == 'green' else 'bg-amber-500' if item.level == 'yellow' else 'bg-red-500' }}"></span>
+            </div>
+            <p class="mt-1 text-sm text-slate-700 dark:text-slate-300">{{ item.message }}</p>
+            {% if item.excerpt %}<p class="mt-2 line-clamp-2 text-xs text-slate-500 dark:text-slate-400">{{ item.excerpt }}</p>{% endif %}
+          </article>
+        {% endfor %}
+      </div>
+    </div>
+
+    <aside class="rounded-md border border-slate-200 bg-white p-4 shadow-sm dark:border-slate-800 dark:bg-slate-900">
+      <div class="flex flex-wrap items-center justify-between gap-2">
+        <h2 class="text-sm font-semibold text-slate-950 dark:text-white">Resume Preview</h2>
+        <div class="flex items-center gap-1">
+          <button type="button" id="previewZoomOut" class="grid h-8 w-8 place-items-center rounded-md border border-slate-200 text-slate-600 hover:bg-slate-50 dark:border-slate-700 dark:text-slate-300 dark:hover:bg-slate-800" title="Zoom out"><i data-lucide="zoom-out" class="h-4 w-4"></i></button>
+          <button type="button" id="previewZoomIn" class="grid h-8 w-8 place-items-center rounded-md border border-slate-200 text-slate-600 hover:bg-slate-50 dark:border-slate-700 dark:text-slate-300 dark:hover:bg-slate-800" title="Zoom in"><i data-lucide="zoom-in" class="h-4 w-4"></i></button>
+          <button type="button" id="togglePreviewMask" class="grid h-8 w-8 place-items-center rounded-md border border-slate-200 text-slate-600 hover:bg-slate-50 dark:border-slate-700 dark:text-slate-300 dark:hover:bg-slate-800" title="Toggle privacy"><i data-lucide="shield" class="h-4 w-4"></i></button>
+          <a href="{{ url_for('download_resume', analysis_id=analysis.id) }}" class="grid h-8 w-8 place-items-center rounded-md bg-brand-600 text-white hover:bg-brand-700" title="Download PDF"><i data-lucide="download" class="h-4 w-4"></i></a>
+        </div>
+      </div>
+      <div id="resumePreview" class="app-scrollbar resume-preview mt-4 max-h-[620px] overflow-auto rounded-md border border-slate-200 bg-slate-50 p-4 text-xs leading-5 text-slate-700 dark:border-slate-800 dark:bg-slate-950 dark:text-slate-300">
+        <div id="maskedPreviewLines">
+          {% for line in preview_lines %}
+            <div class="resume-preview-line {{ 'resume-heading' if line.is_heading else '' }}" data-section="{{ line.section }}">{{ line.text }}</div>
+          {% endfor %}
+        </div>
+        <div id="rawPreviewLines" class="hidden">
+          {% for line in raw_preview_lines %}
+            <div class="resume-preview-line {{ 'resume-heading' if line.is_heading else '' }}" data-section="{{ line.section }}">{{ line.text }}</div>
+          {% endfor %}
+        </div>
+      </div>
+    </aside>
+  </section>
+
+  <section id="ats" class="scroll-mt-32 mt-6 grid gap-5 xl:grid-cols-[minmax(0,1fr)_420px]">
+    <div class="rounded-md border border-slate-200 bg-white p-5 shadow-sm dark:border-slate-800 dark:bg-slate-900">
+      <div class="flex items-center justify-between gap-3">
+        <h2 class="text-lg font-semibold text-slate-950 dark:text-white">Advanced ATS Analyzer</h2>
+        <span class="rounded-md bg-brand-50 px-2.5 py-1.5 text-xs font-semibold text-brand-700 dark:bg-brand-950/40 dark:text-brand-200">{{ ats.score|default(0) }}/100</span>
+      </div>
+      <div class="mt-4 flex flex-wrap gap-2">
+        {% for keyword in ats.matched_keywords[:12] %}
+          <span class="rounded-md bg-brand-50 px-2.5 py-1.5 text-xs font-medium text-brand-700 dark:bg-brand-950/40 dark:text-brand-200">{{ keyword }}</span>
+        {% endfor %}
+        {% for keyword in ats.missing_keywords[:10] %}
+          <span class="rounded-md bg-red-50 px-2.5 py-1.5 text-xs font-medium text-red-700 dark:bg-red-950/40 dark:text-red-200">{{ keyword }}</span>
+        {% endfor %}
+      </div>
+      <div class="mt-5 grid gap-3 md:grid-cols-2">
+        {% for issue in ats.issues %}
+          <article class="rounded-md border border-slate-200 p-3 dark:border-slate-800">
+            <div class="flex items-center justify-between gap-3">
+              <p class="text-sm font-semibold text-slate-950 dark:text-white">{{ issue.issue }}</p>
+              <span class="rounded-md bg-slate-100 px-2 py-1 text-[11px] font-semibold text-slate-600 dark:bg-slate-800 dark:text-slate-300">{{ issue.severity }}</span>
+            </div>
+            <p class="mt-1 text-xs leading-5 text-slate-500 dark:text-slate-400">{{ issue.reason }}</p>
+            <p class="mt-2 text-sm text-slate-700 dark:text-slate-300">{{ issue.suggestion }}</p>
+          </article>
+        {% else %}
+          <p class="text-sm text-slate-500 dark:text-slate-400">No critical ATS issues found.</p>
+        {% endfor %}
+      </div>
+    </div>
+
+    <div class="space-y-5">
+      <details class="rounded-md border border-slate-200 bg-white p-4 shadow-sm open:shadow-soft dark:border-slate-800 dark:bg-slate-900" open>
+        <summary class="cursor-pointer text-sm font-semibold text-slate-950 dark:text-white">Section Analysis</summary>
+        <div class="mt-4 space-y-3">
+          {% for name, section in sections.items() %}
+            <article class="rounded-md bg-slate-50 p-3 dark:bg-slate-950">
+              <div class="flex items-center justify-between gap-3">
+                <h3 class="text-sm font-semibold text-slate-950 dark:text-white">{{ name }}</h3>
+                <span class="rounded-md px-2 py-1 text-xs font-semibold {{ 'bg-brand-100 text-brand-700 dark:bg-brand-950 dark:text-brand-200' if section.heat == 'green' else 'bg-amber-100 text-amber-700 dark:bg-amber-950 dark:text-amber-200' if section.heat == 'yellow' else 'bg-red-100 text-red-700 dark:bg-red-950 dark:text-red-200' }}">{{ section.score }}</span>
+              </div>
+              <p class="mt-2 text-xs leading-5 text-slate-500 dark:text-slate-400">{{ section.suggestions[0] if section.suggestions else section.strengths[0] if section.strengths else "No major note." }}</p>
+            </article>
+          {% endfor %}
+        </div>
+      </details>
+
+      <details class="rounded-md border border-slate-200 bg-white p-4 shadow-sm dark:border-slate-800 dark:bg-slate-900">
+        <summary class="cursor-pointer text-sm font-semibold text-slate-950 dark:text-white">Missing Sections</summary>
+        <div class="mt-4 space-y-3">
+          {% for item in result.missing_sections %}
+            <article class="rounded-md bg-slate-50 p-3 dark:bg-slate-950">
+              <div class="flex items-center justify-between gap-3">
+                <p class="text-sm font-semibold text-slate-950 dark:text-white">{{ item.section }}</p>
+                <span class="rounded-md bg-slate-100 px-2 py-1 text-xs font-medium text-slate-600 dark:bg-slate-800 dark:text-slate-300">{{ item.severity }}</span>
+              </div>
+              <p class="mt-2 text-sm text-slate-600 dark:text-slate-300">{{ item.suggestion }}</p>
+            </article>
+          {% else %}
+            <p class="text-sm text-slate-500">No important missing sections detected.</p>
+          {% endfor %}
+        </div>
+      </details>
+
+      <div class="rounded-md border border-slate-200 bg-white p-4 shadow-sm dark:border-slate-800 dark:bg-slate-900">
+        <h2 class="text-sm font-semibold text-slate-950 dark:text-white">Achievement Signals</h2>
+        <dl class="mt-4 grid grid-cols-2 gap-3">
+          <div class="rounded-md bg-slate-50 p-3 dark:bg-slate-950"><dt class="text-xs text-slate-500">Metrics</dt><dd class="mt-1 text-2xl font-semibold text-slate-950 dark:text-white">{{ achievements.metric_count|default(0) }}</dd></div>
+          <div class="rounded-md bg-slate-50 p-3 dark:bg-slate-950"><dt class="text-xs text-slate-500">Weak bullets</dt><dd class="mt-1 text-2xl font-semibold text-slate-950 dark:text-white">{{ achievements.weak_bullet_count|default(0) }}</dd></div>
+        </dl>
+        <ul class="mt-4 space-y-2 text-sm leading-6 text-slate-700 dark:text-slate-300">
+          {% for item in achievements.suggestions[:4] %}
+            <li class="flex gap-2"><i data-lucide="target" class="mt-0.5 h-4 w-4 shrink-0 text-cyanx-600"></i>{{ item }}</li>
+          {% else %}
+            <li class="text-slate-500">Measurable outcomes look acceptable.</li>
+          {% endfor %}
+        </ul>
+      </div>
+    </div>
+  </section>
+
+  <section id="rewriter" class="scroll-mt-32 mt-6 rounded-md border border-slate-200 bg-white p-5 shadow-sm dark:border-slate-800 dark:bg-slate-900">
+    <div class="flex items-center justify-between gap-3">
+      <h2 class="text-lg font-semibold text-slate-950 dark:text-white">AI Resume Rewriter</h2>
+      <span class="rounded-md bg-slate-100 px-2.5 py-1.5 text-xs font-semibold text-slate-600 dark:bg-slate-800 dark:text-slate-300">{{ result.rewrites|length }} sections</span>
+    </div>
+    <div class="mt-5 grid gap-4">
+      {% for item in result.rewrites %}
+        <article class="rounded-md border border-slate-200 p-4 dark:border-slate-800">
+          <div class="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+            <h3 class="text-sm font-semibold text-slate-950 dark:text-white">{{ item.section }}</h3>
+            <button type="button" class="rewrite-button inline-flex items-center justify-center gap-2 rounded-md border border-slate-200 px-3 py-2 text-xs font-semibold text-slate-700 hover:bg-slate-50 dark:border-slate-700 dark:text-slate-200 dark:hover:bg-slate-800" data-analysis-id="{{ analysis.id }}" data-section="{{ item.section }}" data-before="{{ item.before|e }}">
+              <i data-lucide="refresh-cw" class="h-3.5 w-3.5"></i>
+              Regenerate
+            </button>
+          </div>
+          <div class="mt-3 grid gap-3 lg:grid-cols-[minmax(0,0.8fr)_minmax(0,1.2fr)]">
+            <div class="rounded-md bg-slate-50 p-3 text-sm leading-6 text-slate-600 dark:bg-slate-950 dark:text-slate-300">
+              <p class="text-xs font-semibold uppercase tracking-wide text-slate-500">Before</p>
+              <p class="mt-2">{{ item.before }}</p>
+            </div>
+            <div class="rewrite-output space-y-2">
+              {% for version in item.versions %}
+                <div class="rounded-md bg-brand-50 p-3 text-sm leading-6 text-slate-700 dark:bg-brand-950/30 dark:text-slate-200">
+                  <div class="flex items-start justify-between gap-3">
+                    <p>{{ version }}</p>
+                    <button type="button" class="copy-button shrink-0 rounded-md p-1.5 text-brand-700 hover:bg-brand-100 dark:text-brand-200 dark:hover:bg-brand-900" title="Copy"><i data-lucide="copy" class="h-4 w-4"></i></button>
+                  </div>
+                </div>
+              {% endfor %}
+            </div>
+          </div>
+        </article>
+      {% else %}
+        <div class="rounded-md border border-dashed border-slate-200 bg-slate-50 p-5 text-sm text-slate-500 dark:border-slate-800 dark:bg-slate-950">No rewrite candidates found.</div>
+      {% endfor %}
+    </div>
+  </section>
+
+  <section id="roadmap" class="scroll-mt-32 mt-6 rounded-md border border-slate-200 bg-white p-5 shadow-sm dark:border-slate-800 dark:bg-slate-900">
+    <div class="flex flex-col gap-3 lg:flex-row lg:items-start lg:justify-between">
+      <div>
+        <h2 class="text-lg font-semibold text-slate-950 dark:text-white">Personalized 4-Week Roadmap</h2>
+        <p class="mt-1 text-sm text-slate-500 dark:text-slate-400">{{ result.roadmap.current_profile }}</p>
+      </div>
+      {% if result.experience_alternatives %}
+        <span class="inline-flex w-fit rounded-md bg-cyanx-50 px-3 py-1.5 text-xs font-semibold text-cyanx-600 dark:bg-cyan-950/40 dark:text-cyan-200">{{ result.experience_alternatives|join(", ") }}</span>
+      {% endif %}
+    </div>
+    <div class="mt-5 grid gap-4 md:grid-cols-2 xl:grid-cols-4">
+      {% for week in result.roadmap.weeks %}
+        <article class="rounded-md border border-slate-200 bg-slate-50 p-4 dark:border-slate-800 dark:bg-slate-950">
+          <p class="text-sm font-semibold text-slate-950 dark:text-white">{{ week.week }}</p>
+          <p class="mt-1 text-sm font-medium text-brand-700 dark:text-brand-200">{{ week.focus }}</p>
+          <ul class="mt-3 space-y-2 text-xs leading-5 text-slate-600 dark:text-slate-300">
+            {% for task in week.tasks %}
+              <li>{{ task }}</li>
+            {% endfor %}
+          </ul>
+        </article>
+      {% endfor %}
+    </div>
+  </section>
+
+  <section id="jobs" class="scroll-mt-32 mt-6 rounded-md border border-slate-200 bg-white p-5 shadow-sm dark:border-slate-800 dark:bg-slate-900">
+    <div class="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
+      <div>
+        <div class="flex flex-wrap items-center gap-2">
+          <h2 class="text-lg font-semibold text-slate-950 dark:text-white">Matching Jobs</h2>
+          <span class="rounded-md px-2.5 py-1.5 text-xs font-semibold {{ 'bg-cyanx-50 text-cyanx-600 dark:bg-cyan-950/40 dark:text-cyan-200' if job_source == 'demo' else 'bg-brand-50 text-brand-700 dark:bg-brand-950/40 dark:text-brand-200' }}">{{ "Demo mode" if job_source == "demo" else "Live jobs" if job_source == "live-api" else "Jobs" }}</span>
+        </div>
+        <p class="mt-1 text-sm text-slate-500 dark:text-slate-400">Query: {{ profile.job_query|default(profile.role) }}</p>
+      </div>
+      <form id="jobFilters" class="grid w-full gap-2 sm:grid-cols-2 lg:w-auto lg:grid-cols-6">
+        <input name="location" class="rounded-md border border-slate-200 bg-white px-3 py-2 text-xs dark:border-slate-700 dark:bg-slate-950" placeholder="Location">
+        <label class="inline-flex items-center gap-2 rounded-md border border-slate-200 px-3 py-2 text-xs dark:border-slate-700"><input name="remote" type="checkbox"> Remote</label>
+        <input name="salary_min" class="rounded-md border border-slate-200 bg-white px-3 py-2 text-xs dark:border-slate-700 dark:bg-slate-950" placeholder="Salary min">
+        <select name="experience" class="rounded-md border border-slate-200 bg-white px-3 py-2 text-xs dark:border-slate-700 dark:bg-slate-950">
+          <option value="">Experience</option>
+          <option value="0-1">0-1 yrs</option>
+          <option value="1-3">1-3 yrs</option>
+          <option value="3-5">3-5 yrs</option>
+          <option value="5+">5+ yrs</option>
+        </select>
+        <label class="inline-flex items-center gap-2 rounded-md border border-slate-200 px-3 py-2 text-xs dark:border-slate-700"><input name="freshers" value="1" type="checkbox" {% if result.candidate_level == "fresher" %}checked{% endif %}> Fresher</label>
+        <button type="button" id="refreshJobsButton" data-analysis-id="{{ analysis.id }}" class="rounded-md bg-slate-900 px-3 py-2 text-xs font-semibold text-white dark:bg-white dark:text-slate-950">Filter</button>
+      </form>
+    </div>
+    {% if job_recommendation_error %}
+      <div class="mt-4 rounded-md border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-900 dark:border-amber-900 dark:bg-amber-950/40 dark:text-amber-100">{{ job_recommendation_error }}</div>
+    {% elif job_source == "demo" %}
+      <div class="mt-4 rounded-md border border-cyan-200 bg-cyan-50 px-4 py-3 text-sm text-cyan-900 dark:border-cyan-900 dark:bg-cyan-950/40 dark:text-cyan-100">Live job APIs are not connected, so sample roles are shown with the same matching UI.</div>
+    {% endif %}
+    <div id="jobsList" class="mt-5 grid gap-4">
+      {% for job in job_recommendations %}
+        <article class="job-card rounded-md border border-slate-200 bg-white p-4 shadow-sm dark:border-slate-800 dark:bg-slate-950">
+          <div class="flex flex-col gap-4 md:flex-row md:items-start md:justify-between">
+            <div class="min-w-0">
+              <div class="flex flex-wrap items-center gap-2">
+                <h3 class="text-base font-semibold text-slate-950 dark:text-white">{{ job.title }}</h3>
+                {% if job.work_mode %}<span class="rounded-md bg-slate-100 px-2 py-1 text-xs text-slate-600 dark:bg-slate-800 dark:text-slate-300">{{ job.work_mode }}</span>{% endif %}
+                {% if job.source %}<span class="rounded-md bg-cyanx-50 px-2 py-1 text-xs text-cyanx-600 dark:bg-cyan-950/40 dark:text-cyan-200">{{ job.source }}</span>{% endif %}
+              </div>
+              <p class="mt-1 text-sm text-slate-500 dark:text-slate-400">{{ job.company }}{% if job.location %} | {{ job.location }}{% endif %}{% if job.salary %} | {{ job.salary }}{% endif %}</p>
+              <p class="mt-3 line-clamp-2 text-sm leading-6 text-slate-600 dark:text-slate-300">{{ job.description }}</p>
+            </div>
+            <div class="w-full shrink-0 md:w-48">
+              <div class="flex items-center justify-between text-xs"><span class="text-slate-500">Match</span><span class="font-semibold text-slate-950 dark:text-white">{{ job.match_percent|default(job.similarity|default(0)) }}%</span></div>
+              <div class="mt-2 h-2.5 overflow-hidden rounded-full bg-slate-100 dark:bg-slate-800"><div class="h-full rounded-full bg-brand-600" style="width: {{ job.match_percent|default(job.similarity|default(0)) }}%;"></div></div>
+              {% if job.apply_link %}<a href="{{ job.apply_link }}" target="_blank" rel="noopener" class="mt-3 inline-flex w-full items-center justify-center gap-2 rounded-md bg-brand-600 px-3 py-2 text-xs font-semibold text-white hover:bg-brand-700">Apply <i data-lucide="external-link" class="h-3.5 w-3.5"></i></a>{% endif %}
+            </div>
+          </div>
+          <div class="mt-4 grid gap-2 sm:grid-cols-2">
+            <div class="flex flex-wrap items-center gap-2">
+              <span class="text-xs font-semibold text-slate-500 dark:text-slate-400">Matched</span>
+              {% for skill in job.matched_skills[:8] %}<span class="rounded-md bg-brand-50 px-2.5 py-1.5 text-xs font-medium text-brand-700 dark:bg-brand-950/40 dark:text-brand-200">{{ skill }}</span>{% endfor %}
+            </div>
+            <div class="flex flex-wrap items-center gap-2">
+              <span class="text-xs font-semibold text-slate-500 dark:text-slate-400">Missing</span>
+              {% for skill in job.missing_skills[:6] %}<span class="rounded-md bg-red-50 px-2.5 py-1.5 text-xs font-medium text-red-700 dark:bg-red-950/40 dark:text-red-200">{{ skill }}</span>{% endfor %}
+            </div>
+          </div>
+        </article>
+      {% else %}
+        <div class="rounded-md border border-dashed border-slate-200 bg-slate-50 p-5 text-sm text-slate-500 dark:border-slate-800 dark:bg-slate-950">No matching jobs found for these filters.</div>
+      {% endfor %}
+    </div>
+  </section>
+
+  <section id="chat" class="scroll-mt-32 mt-6 grid gap-5 xl:grid-cols-[minmax(0,1fr)_420px]">
+    <div class="rounded-md border border-slate-200 bg-white p-5 shadow-sm dark:border-slate-800 dark:bg-slate-900">
+      <h2 class="text-lg font-semibold text-slate-950 dark:text-white">AI Job Match Analyzer</h2>
+      <p class="mt-1 text-sm text-slate-500 dark:text-slate-400">Paste a job description to compare it against this resume.</p>
+      <textarea id="jobMatchDescription" rows="7" class="mt-4 w-full rounded-md border border-slate-200 bg-white px-3 py-3 text-sm leading-6 dark:border-slate-700 dark:bg-slate-950" placeholder="Paste job description...">{{ analysis.job_description or "" }}</textarea>
+      <button id="jobMatchButton" type="button" data-analysis-id="{{ analysis.id }}" class="mt-3 inline-flex items-center gap-2 rounded-md bg-cyanx-600 px-4 py-2.5 text-sm font-semibold text-white hover:bg-cyanx-500"><i data-lucide="git-compare-arrows" class="h-4 w-4"></i>Analyze Job Match</button>
+      <div id="jobMatchOutput" class="mt-4">
+        {% if result.job_match %}
+          <div class="rounded-md border border-slate-200 p-4 dark:border-slate-800">
+            <p class="text-sm font-semibold text-slate-950 dark:text-white">Match Score: {{ result.job_match.score }}%</p>
+            <p class="mt-2 text-sm leading-6 text-slate-600 dark:text-slate-300">{{ result.job_match.reason|default(result.job_match.explanation) }}</p>
+          </div>
+        {% endif %}
+      </div>
+    </div>
+
+    <div class="rounded-md border border-slate-200 bg-white p-5 shadow-sm dark:border-slate-800 dark:bg-slate-900">
+      <div class="flex items-center justify-between gap-3">
+        <div>
+          <h2 class="text-lg font-semibold text-slate-950 dark:text-white">Resume AI Chatbot</h2>
+          <p class="mt-1 text-sm text-slate-500 dark:text-slate-400">Answers from this uploaded resume context.</p>
+        </div>
+        <button id="clearChatButton" type="button" class="grid h-9 w-9 place-items-center rounded-md border border-slate-200 text-slate-600 hover:bg-slate-50 dark:border-slate-700 dark:text-slate-300 dark:hover:bg-slate-800" title="Clear chat"><i data-lucide="trash-2" class="h-4 w-4"></i></button>
+      </div>
+      <input id="targetRole" type="hidden" value="{{ profile.role|default('') }}">
+      <input id="skillsInput" type="hidden" value="{{ skills|join(', ') }}">
+      <textarea id="resumeContext" class="hidden">{{ analysis.resume_text }}</textarea>
+      <textarea id="jobContext" class="hidden">{{ analysis.job_description or "" }}</textarea>
+      <input id="analysisId" type="hidden" value="{{ analysis.id }}">
+
+      <div id="chatMessages" class="app-scrollbar mt-4 flex h-[390px] flex-col gap-3 overflow-y-auto rounded-md border border-slate-200 bg-slate-50 p-3 dark:border-slate-800 dark:bg-slate-950">
+        {% if chat_history %}
+          {% for message in chat_history %}
+            <div class="flex {{ 'justify-end' if message.role == 'user' else 'justify-start' }}">
+              <div class="chat-bubble {{ 'chat-bubble-user' if message.role == 'user' else 'chat-bubble-assistant' }} max-w-[86%] rounded-md px-4 py-3 text-sm leading-6 shadow-sm">{{ message.content }}</div>
+            </div>
+          {% endfor %}
+        {% else %}
+          <div class="flex justify-start">
+            <div class="chat-bubble chat-bubble-assistant max-w-[86%] rounded-md px-4 py-3 text-sm leading-6 shadow-sm">Ask about weaknesses, ATS score, summary rewrites, matching jobs, or next learning steps.</div>
+          </div>
+        {% endif %}
+      </div>
+      <div id="typingIndicator" class="mt-2 hidden text-xs text-slate-500 dark:text-slate-400">Assistant is typing...</div>
+      <div id="quickPrompts" class="mt-3 flex flex-wrap gap-2">
+        {% for prompt in [
+          "What are my top 5 weaknesses?",
+          "How can I improve ATS score?",
+          "Rewrite my summary.",
+          "Which jobs suit me?",
+          "What should I learn next?"
+        ] %}
+          <button type="button" class="quick-prompt rounded-md bg-slate-100 px-3 py-1.5 text-xs font-medium text-slate-600 hover:bg-brand-50 hover:text-brand-700 dark:bg-slate-800 dark:text-slate-300">{{ prompt }}</button>
+        {% endfor %}
+      </div>
+      <form id="chatForm" class="mt-3 flex items-end gap-2">
+        <textarea id="careerQuestionInput" rows="1" class="min-h-11 flex-1 resize-none rounded-md border border-slate-200 bg-white px-3 py-3 text-sm outline-none focus:border-brand-500 focus:ring-2 focus:ring-brand-100 dark:border-slate-700 dark:bg-slate-950 dark:focus:ring-brand-900" placeholder="Ask about this resume" required></textarea>
+        <button id="sendButton" type="submit" class="grid h-11 w-11 shrink-0 place-items-center rounded-md bg-brand-600 text-white hover:bg-brand-700 disabled:opacity-60"><i data-lucide="send-horizontal" class="h-5 w-5"></i></button>
+      </form>
+    </div>
+  </section>
+</section>
+{% endblock %}
+
+{% block scripts %}
+<script>
+  window.resumeAnalyzerScores = {{ score_data.breakdown|tojson }};
+</script>
+{% endblock %}

@@ -1,0 +1,11 @@
+.env
+venv/
+__pycache__/
+*.pyc
+flask-server.out.log
+flask-server.err.log
+uploads/*
+!uploads/.gitkeep
+*.log
+flask-server-started.txt
+server-test.txt
