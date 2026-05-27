@@ -6,6 +6,8 @@ from dataclasses import dataclass
 from typing import Any
 
 import httpx
+from dotenv import load_dotenv
+load_dotenv()
 
 try:
     from .recommender import recommend_jobs
@@ -25,7 +27,7 @@ class JobFilters:
     salary_min: int | None = None
     experience: str = ""
     freshers: bool = False
-    country: str = "us"
+    country: str = "in"
 
 
 def fetch_matching_jobs(
@@ -149,10 +151,23 @@ class MissingProviderConfig(RuntimeError):
 
 
 def build_query(profile: dict[str, Any], skills: list[str], filters: JobFilters | None = None) -> str:
-    role = str(profile.get("role") or "professional").strip()
-    skill_text = " ".join(skills[:4])
-    filter_text = build_filter_query_terms(filters or JobFilters())
-    return " ".join(part for part in (role, skill_text, filter_text) if part).strip()
+    role = str(profile.get("role") or "").strip()
+    role = role.replace("/", " ").replace("|", " ")
+    role = re.sub(r"\bprofessional\b", "", role, flags=re.IGNORECASE)
+    role = re.sub(r"\s+", " ", role).strip()
+
+    normalized_role = normalize_text(role)
+
+    if "frontend" in normalized_role:
+        return "frontend developer"
+    if "web" in normalized_role and "developer" in normalized_role:
+        return "web developer"
+    if "nurse" in normalized_role or "healthcare" in normalized_role:
+        return "nurse"
+    if "software" in normalized_role:
+        return "software developer"
+
+    return role or " ".join(skills[:2]) or "fresher"
 
 
 def build_filter_query_terms(filters: JobFilters) -> str:
@@ -215,7 +230,7 @@ def fetch_adzuna_jobs(query: str, filters: JobFilters, limit: int) -> list[dict[
     if not app_id or not app_key:
         raise MissingProviderConfig("Adzuna credentials missing. Set ADZUNA_APP_ID and ADZUNA_APP_KEY.")
 
-    country = (filters.country or os.getenv("ADZUNA_COUNTRY") or "us").lower()
+    country = (filters.country or os.getenv("ADZUNA_COUNTRY") or os.getenv("JOBS_COUNTRY") or "in").lower()
     params: dict[str, Any] = {
         "app_id": app_id,
         "app_key": app_key,

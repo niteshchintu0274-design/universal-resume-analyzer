@@ -30,7 +30,11 @@ def _as_float(value: str | None, default: float) -> float:
 
 class Config:
     SECRET_KEY = os.getenv("SECRET_KEY", "dev-change-this-secret-key")
-    DEBUG = _as_bool(os.getenv("FLASK_DEBUG"), True)
+
+    GEMINI_API_KEY = os.getenv("GEMINI_API_KEY")
+    GEMINI_MODEL = os.getenv("GEMINI_MODEL", "gemini-2.5-flash")
+    GEMINI_MAX_TOKENS = _as_int(os.getenv("GEMINI_MAX_TOKENS"), 1200)
+    GEMINI_TEMPERATURE = _as_float(os.getenv("GEMINI_TEMPERATURE"), 0.3)
 
     BASE_DIR = BASE_DIR
     UPLOAD_FOLDER = Path(os.getenv("UPLOAD_FOLDER", BASE_DIR / "uploads"))
@@ -57,9 +61,11 @@ class Config:
     TAILWIND_CDN_URL = os.getenv("TAILWIND_CDN_URL", "https://cdn.tailwindcss.com")
 
     JSEARCH_RAPIDAPI_KEY = os.getenv("JSEARCH_RAPIDAPI_KEY") or os.getenv("RAPIDAPI_KEY")
+    JOBS_PROVIDER = os.getenv("JOBS_PROVIDER", "adzuna").lower()
+    JOBS_COUNTRY = os.getenv("JOBS_COUNTRY", os.getenv("ADZUNA_COUNTRY", "in")).lower()
     ADZUNA_APP_ID = os.getenv("ADZUNA_APP_ID")
     ADZUNA_APP_KEY = os.getenv("ADZUNA_APP_KEY")
-    ADZUNA_COUNTRY = os.getenv("ADZUNA_COUNTRY", "us")
+    ADZUNA_COUNTRY = os.getenv("ADZUNA_COUNTRY", "in")
     RAPIDAPI_JOBS_KEY = os.getenv("RAPIDAPI_JOBS_KEY")
     RAPIDAPI_JOBS_HOST = os.getenv("RAPIDAPI_JOBS_HOST")
     RAPIDAPI_JOBS_URL = os.getenv("RAPIDAPI_JOBS_URL")

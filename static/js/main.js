@@ -18,6 +18,7 @@
     initPreviewTools();
     initRewriteButtons();
     initCopyButtons();
+    initInterviewPrep();
     initJobMatch();
     initJobFilters();
     initChat();
@@ -325,12 +326,183 @@
       if (button.dataset.bound === "1") return;
       button.dataset.bound = "1";
       button.addEventListener("click", async () => {
-        const text = button.closest("div").querySelector("p")?.textContent || "";
+        const scope = button.closest("[data-copy-scope]");
+        const text = button.dataset.copyText || scope?.querySelector("[data-copy-source]")?.textContent || button.closest("div")?.querySelector("p")?.textContent || "";
         await navigator.clipboard.writeText(text);
         button.classList.add("bg-brand-100");
         setTimeout(() => button.classList.remove("bg-brand-100"), 700);
       });
     });
+  }
+
+  function initInterviewPrep() {
+    const button = byId("generateInterviewButton");
+    const list = byId("interviewQuestionsList");
+    const categoryFilter = byId("interviewCategoryFilter");
+    const difficultyFilter = byId("interviewDifficultyFilter");
+    if (!button || !list) return;
+
+    [categoryFilter, difficultyFilter].forEach((filter) => {
+      if (filter) filter.addEventListener("change", filterInterviewQuestions);
+    });
+    filterInterviewQuestions();
+
+    button.addEventListener("click", async () => {
+      button.disabled = true;
+      list.innerHTML = `<div class="rounded-md border border-slate-200 p-5 text-sm text-slate-500 dark:border-slate-800">Generating interview questions...</div>`;
+      try {
+        const data = await postJson(`/api/interview-questions/${button.dataset.analysisId}`, {
+          target_role: button.dataset.targetRole || getValue(byId("targetRole")),
+          job_description: getValue(byId("jobMatchDescription")) || getValue(byId("jobContext"))
+        });
+        renderInterviewQuestions(data.interview_questions || {});
+      } catch (error) {
+        list.innerHTML = `<div class="rounded-md border border-red-200 bg-red-50 p-5 text-sm text-red-700">${escapeHtml(friendlyMessage(error.message, "interview"))}</div>`;
+      } finally {
+        button.disabled = false;
+      }
+    });
+  }
+
+  function renderInterviewQuestions(bundle) {
+    const list = byId("interviewQuestionsList");
+    const count = byId("interviewQuestionCount");
+    const provider = byId("interviewProvider");
+    const generatedAt = byId("interviewGeneratedAt");
+    if (!list) return;
+
+    const sections = bundle.sections || [];
+    const questions = bundle.questions || [];
+    if (count) count.textContent = `${questions.length} question${questions.length === 1 ? "" : "s"}`;
+    if (provider) {
+      provider.textContent = bundle.ai_provider ? titleCase(bundle.ai_provider) : "";
+      provider.classList.toggle("hidden", !bundle.ai_provider);
+    }
+    if (generatedAt) {
+      generatedAt.textContent = bundle.created_at_display
+        ? `Generated ${bundle.created_at_display}${bundle.job_description_used ? " with target job description" : ""}`
+        : "Generated interview questions from this analysis.";
+    }
+
+    if (!sections.length) {
+      list.innerHTML = `<div id="interviewEmptyState" class="rounded-md border border-dashed border-slate-200 bg-slate-50 p-5 text-sm text-slate-500 dark:border-slate-800 dark:bg-slate-950 dark:text-slate-400">Analyze your resume first to generate personalized interview questions.</div>`;
+      return;
+    }
+
+    list.innerHTML = sections.map(renderInterviewSection).join("");
+    initCopyButtons(list);
+    initIcons();
+    filterInterviewQuestions();
+  }
+
+  function renderInterviewSection(section) {
+    const questions = section.questions || [];
+    return `
+      <div class="interview-section space-y-3" data-section="${escapeAttribute(section.title || "")}">
+        <h3 class="text-sm font-semibold text-slate-950 dark:text-white">${escapeHtml(section.title || "Interview questions")}</h3>
+        <div class="grid gap-3 lg:grid-cols-2">
+          ${questions.map(renderInterviewCard).join("")}
+        </div>
+      </div>
+    `;
+  }
+
+  function renderInterviewCard(question) {
+    const difficultyClass = question.difficulty === "Easy"
+      ? "bg-brand-50 text-brand-700 dark:bg-brand-950/40 dark:text-brand-200"
+      : question.difficulty === "Hard"
+        ? "bg-red-50 text-red-700 dark:bg-red-950/40 dark:text-red-200"
+        : "bg-amber-50 text-amber-700 dark:bg-amber-950/40 dark:text-amber-200";
+    return `
+      <article class="interview-card rounded-md border border-slate-200 bg-slate-50 p-4 dark:border-slate-800 dark:bg-slate-950" data-category="${escapeAttribute(question.category || "")}" data-difficulty="${escapeAttribute(question.difficulty || "")}">
+        <div class="flex flex-wrap items-center gap-2">
+          <span class="rounded-md bg-white px-2.5 py-1 text-xs font-semibold text-slate-600 ring-1 ring-slate-200 dark:bg-slate-900 dark:text-slate-300 dark:ring-slate-800">${escapeHtml(question.category || "HR")}</span>
+          <span class="rounded-md px-2.5 py-1 text-xs font-semibold ${difficultyClass}">${escapeHtml(question.difficulty || "Medium")}</span>
+        </div>
+        <h4 class="mt-3 text-sm font-semibold leading-6 text-slate-950 dark:text-white">${escapeHtml(question.question || "")}</h4>
+        <dl class="mt-3 space-y-3 text-sm leading-6">
+          ${renderInterviewDetail("Why interviewer may ask", question.why_asked)}
+          ${renderInterviewDetail("What the interviewer wants to check", question.interviewer_checks)}
+          ${renderCopyableInterviewDetail("Suggested answer approach", question.answer_approach || "", "Copy answer approach")}
+          ${renderCopyableInterviewDetail("Sample Answer", question.sample_answer || "Generate again to get a full sample answer.", "Copy sample answer")}
+          ${renderInterviewKeyPoints(question.key_points)}
+          ${renderInterviewDetail("Mistake to Avoid", question.mistake_to_avoid || "Generate again to get a common mistake to avoid.")}
+        </dl>
+      </article>
+    `;
+  }
+
+  function renderCopyableInterviewDetail(label, value, title) {
+    return `
+      <div class="rounded-md bg-white p-3 dark:bg-slate-900" data-copy-scope>
+        <div class="flex items-start justify-between gap-3">
+          <div>
+            <dt class="text-xs font-semibold uppercase text-slate-500 dark:text-slate-400">${escapeHtml(label)}</dt>
+            <dd class="mt-1 whitespace-pre-line text-slate-700 dark:text-slate-300" data-copy-source>${escapeHtml(value || "")}</dd>
+          </div>
+          <button type="button" class="copy-button shrink-0 rounded-md p-1.5 text-brand-700 hover:bg-brand-100 dark:text-brand-200 dark:hover:bg-brand-900" title="${escapeAttribute(title || "Copy")}"><i data-lucide="copy" class="h-4 w-4"></i></button>
+        </div>
+      </div>
+    `;
+  }
+
+  function renderInterviewKeyPoints(value) {
+    const points = normalizeInterviewKeyPoints(value);
+    return `
+      <div>
+        <dt class="text-xs font-semibold uppercase text-slate-500 dark:text-slate-400">Key Points to Include</dt>
+        <dd class="mt-1 text-slate-700 dark:text-slate-300">
+          ${points.length
+            ? `<ul class="list-disc space-y-1 pl-4">${points.map((point) => `<li>${escapeHtml(point)}</li>`).join("")}</ul>`
+            : "Generate again to get key points to include."}
+        </dd>
+      </div>
+    `;
+  }
+
+  function normalizeInterviewKeyPoints(value) {
+    if (Array.isArray(value)) {
+      return value.map((point) => String(point || "").trim()).filter(Boolean);
+    }
+    if (typeof value === "string") {
+      return value.split(/\n|;/).map((point) => point.trim()).filter(Boolean);
+    }
+    return [];
+  }
+
+  function renderInterviewDetail(label, value) {
+    return `
+      <div>
+        <dt class="text-xs font-semibold uppercase text-slate-500 dark:text-slate-400">${escapeHtml(label)}</dt>
+        <dd class="mt-1 text-slate-700 dark:text-slate-300">${escapeHtml(value || "")}</dd>
+      </div>
+    `;
+  }
+
+  function filterInterviewQuestions() {
+    const category = getValue(byId("interviewCategoryFilter"));
+    const difficulty = getValue(byId("interviewDifficultyFilter"));
+    const cards = Array.from(document.querySelectorAll(".interview-card"));
+    const filterEmpty = byId("interviewFilterEmpty");
+    if (!cards.length) {
+      if (filterEmpty) filterEmpty.classList.add("hidden");
+      return;
+    }
+
+    let visibleCount = 0;
+    cards.forEach((card) => {
+      const categoryMatches = !category || card.dataset.category === category;
+      const difficultyMatches = !difficulty || card.dataset.difficulty === difficulty;
+      const visible = categoryMatches && difficultyMatches;
+      card.classList.toggle("hidden", !visible);
+      if (visible) visibleCount += 1;
+    });
+
+    document.querySelectorAll(".interview-section").forEach((section) => {
+      const hasVisibleCard = Boolean(section.querySelector(".interview-card:not(.hidden)"));
+      section.classList.toggle("hidden", !hasVisibleCard);
+    });
+    if (filterEmpty) filterEmpty.classList.toggle("hidden", visibleCount > 0);
   }
 
   function initJobMatch() {
@@ -618,6 +790,10 @@
     });
   }
 
+  function titleCase(value) {
+    return String(value || "").replace(/\b\w/g, (character) => character.toUpperCase());
+  }
+
   function scrollToLatest(container) {
     if (container) container.scrollTop = container.scrollHeight;
   }
@@ -647,6 +823,7 @@
       if (context === "jobs") return "Job matches are in demo mode right now. Try adjusting the filters.";
       if (context === "chat") return "I could not answer that just now. Please try again.";
       if (context === "rewrite") return "Could not regenerate this section right now. Please try again.";
+      if (context === "interview") return "Could not generate interview questions right now. Please try again.";
       return "This request could not be completed right now. Please try again.";
     }
     return message || "This request could not be completed right now. Please try again.";

@@ -193,11 +193,30 @@ def get_connection(database_path: str | Path = DATABASE_PATH) -> sqlite3.Connect
 
 
 def create_tables(connection: sqlite3.Connection) -> None:
+    connection.execute("PRAGMA foreign_keys = ON")
+    create_users_table(connection)
     create_analyses_table(connection)
+    create_chat_messages_table(connection)
+    create_interview_questions_table(connection)
     create_jobs_table(connection)
+    ensure_analyses_columns(connection)
+    ensure_interview_questions_columns(connection)
     ensure_jobs_columns(connection)
     create_indexes(connection)
     connection.commit()
+
+
+def create_users_table(connection: sqlite3.Connection) -> None:
+    connection.execute(
+        """
+        CREATE TABLE IF NOT EXISTS users (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            email TEXT NOT NULL UNIQUE,
+            name TEXT,
+            created_at TEXT NOT NULL
+        )
+        """
+    )
 
 
 def create_analyses_table(connection: sqlite3.Connection) -> None:
@@ -205,6 +224,8 @@ def create_analyses_table(connection: sqlite3.Connection) -> None:
         """
         CREATE TABLE IF NOT EXISTS analyses (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
+            user_id INTEGER,
+            session_id TEXT,
             original_filename TEXT NOT NULL,
             stored_filename TEXT NOT NULL,
             candidate_name TEXT,
@@ -215,7 +236,8 @@ def create_analyses_table(connection: sqlite3.Connection) -> None:
             resume_text TEXT NOT NULL,
             job_description TEXT,
             claude_result TEXT NOT NULL DEFAULT '{}',
-            created_at TEXT NOT NULL
+            created_at TEXT NOT NULL,
+            FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
         )
         """
     )
@@ -239,6 +261,113 @@ def create_jobs_table(connection: sqlite3.Connection) -> None:
         )
         """
     )
+
+
+def create_chat_messages_table(connection: sqlite3.Connection) -> None:
+    connection.execute(
+        """
+        CREATE TABLE IF NOT EXISTS chat_messages (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            analysis_id INTEGER,
+            role TEXT NOT NULL,
+            content TEXT NOT NULL,
+            created_at TEXT NOT NULL,
+            FOREIGN KEY (analysis_id) REFERENCES analyses(id) ON DELETE CASCADE
+        )
+        """
+    )
+
+
+def create_interview_questions_table(connection: sqlite3.Connection) -> None:
+    connection.execute(
+        """
+        CREATE TABLE IF NOT EXISTS interview_questions (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            analysis_id INTEGER NOT NULL,
+            user_id INTEGER,
+            session_id TEXT,
+            target_role TEXT,
+            job_description TEXT,
+            questions_json TEXT NOT NULL DEFAULT '[]',
+            ai_provider TEXT NOT NULL DEFAULT 'local',
+            created_at TEXT NOT NULL,
+            FOREIGN KEY (analysis_id) REFERENCES analyses(id) ON DELETE CASCADE,
+            FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
+        )
+        """
+    )
+
+
+def ensure_analyses_columns(connection: sqlite3.Connection) -> None:
+    existing_columns = {
+        row["name"]
+        for row in connection.execute("PRAGMA table_info(analyses)").fetchall()
+    }
+    if "user_id" not in existing_columns:
+        connection.execute("ALTER TABLE analyses ADD COLUMN user_id INTEGER")
+    if "session_id" not in existing_columns:
+        connection.execute("ALTER TABLE analyses ADD COLUMN session_id TEXT")
+
+
+def ensure_interview_questions_columns(connection: sqlite3.Connection) -> None:
+    columns = {
+        row["name"]: row
+        for row in connection.execute("PRAGMA table_info(interview_questions)").fetchall()
+    }
+    if not columns:
+        return
+    user_id_required = bool(columns.get("user_id") and columns["user_id"]["notnull"])
+    if not user_id_required and "session_id" in columns:
+        return
+
+    has_session_id = "session_id" in columns
+    session_expr = "session_id" if has_session_id else "NULL"
+    connection.execute("DROP TABLE IF EXISTS interview_questions_new")
+    connection.execute(
+        """
+        CREATE TABLE IF NOT EXISTS interview_questions_new (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            analysis_id INTEGER NOT NULL,
+            user_id INTEGER,
+            session_id TEXT,
+            target_role TEXT,
+            job_description TEXT,
+            questions_json TEXT NOT NULL DEFAULT '[]',
+            ai_provider TEXT NOT NULL DEFAULT 'local',
+            created_at TEXT NOT NULL,
+            FOREIGN KEY (analysis_id) REFERENCES analyses(id) ON DELETE CASCADE,
+            FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
+        )
+        """
+    )
+    connection.execute(
+        f"""
+        INSERT INTO interview_questions_new (
+            id,
+            analysis_id,
+            user_id,
+            session_id,
+            target_role,
+            job_description,
+            questions_json,
+            ai_provider,
+            created_at
+        )
+        SELECT
+            id,
+            analysis_id,
+            user_id,
+            {session_expr},
+            target_role,
+            job_description,
+            questions_json,
+            ai_provider,
+            created_at
+        FROM interview_questions
+        """
+    )
+    connection.execute("DROP TABLE interview_questions")
+    connection.execute("ALTER TABLE interview_questions_new RENAME TO interview_questions")
 
 
 def ensure_jobs_columns(connection: sqlite3.Connection) -> None:
@@ -278,6 +407,12 @@ def ensure_jobs_columns(connection: sqlite3.Connection) -> None:
 
 
 def create_indexes(connection: sqlite3.Connection) -> None:
+    connection.execute("CREATE INDEX IF NOT EXISTS idx_users_email ON users(email)")
+    connection.execute("CREATE INDEX IF NOT EXISTS idx_analyses_user_id ON analyses(user_id)")
+    connection.execute("CREATE INDEX IF NOT EXISTS idx_analyses_session_id ON analyses(session_id)")
+    connection.execute("CREATE INDEX IF NOT EXISTS idx_chat_messages_analysis_id ON chat_messages(analysis_id)")
+    connection.execute("CREATE INDEX IF NOT EXISTS idx_interview_questions_analysis_user ON interview_questions(analysis_id, user_id)")
+    connection.execute("CREATE INDEX IF NOT EXISTS idx_interview_questions_analysis_session ON interview_questions(analysis_id, session_id)")
     connection.execute("CREATE INDEX IF NOT EXISTS idx_jobs_title ON jobs(title)")
     connection.execute("CREATE INDEX IF NOT EXISTS idx_jobs_company ON jobs(company)")
     connection.execute("CREATE INDEX IF NOT EXISTS idx_jobs_location ON jobs(location)")

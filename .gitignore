@@ -9,3 +9,9 @@ uploads/*
 *.log
 flask-server-started.txt
 server-test.txt
+
+database/*.db
+*.db
+*.bak
+fix_ai_text.py
+test_adzuna.py
